@@ -1,4 +1,4 @@
-# DLL Injector :syringe:
+# pyEcho DLL Injector :syringe:
 
 This repository contains a Python-based DLL Injector in progress, which is part of my learning journey. The project explores various aspects such as Windows API, DLL injection, and other interesting concepts. :books:
 

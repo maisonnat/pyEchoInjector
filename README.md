@@ -18,17 +18,17 @@ Feel free to join me in this journey, contribute to the project, and leave a :st
 
 ```bash
 pip install -r requirements.txt
-
+```
 
 2. Set up your .env file with the following variables:
 ```bash
 DLL_PATH=path\to\your\dll.dll
 PROCESS_NAME=YourProcess.exe
-
+```
 3. Run the script:
 ```bash
 python main.py
-
+```
 4. Use the following keyboard shortcuts:
 - Alt+I - Inject the DLL
 - Alt+U - Unload the DLL

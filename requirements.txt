@@ -1,0 +1,6 @@
+ctypes
+keyboard
+psutil
+pystray
+Pillow
+python-dotenv

@@ -1,15 +1,32 @@
+"""
+Injects a DLL into a process.
+
+Args:
+    dll_path: The path to the DLL to inject.
+    process_name: The name of the process to inject the DLL into.
+
+Raises:
+    OSError: If the DLL cannot be found or the process cannot be found.
+
+Example:
+    >>> dll_injector = DllInjector("C:\\Windows\\System32\\calc.dll", "calc")
+    >>> dll_injector.inject_dll()
+
+"""
+
 import ctypes
 import os
 import sys
-from ctypes import wintypes
+from ctypes import wintypes, Structure
 
 import keyboard
 import psutil
 import pystray
 from PIL import Image
-from dotenv import load_dotenv
-load_dotenv()
 
+
+class HMODULE(Structure):
+    _fields_ = [("dwLowDateTime", wintypes.DWORD), ("dwHighDateTime", wintypes.DWORD)]
 
 class DllInjector:
     PROCESS_ALL_ACCESS = 0x1F0FFF
@@ -21,27 +38,52 @@ class DllInjector:
 
 
     def __init__(self, dll_path, process_name):
+        """
+        Initializes the DllInjector object.
+
+        Args:
+            dll_path: The path to the DLL to inject.
+            process_name: The name of the process to inject the DLL into.
+
+        """
         self.dll_path = dll_path
         self.process_name = process_name
 
         self.dll = ctypes.CDLL(dll_path)
-        self.process_id = self.get_process_id()
+        self.target_process_id = self.get_target_process_id()
 
-    def get_process_id(self):
+
+    def get_target_process_id(self):
+        """
+        Gets the process ID of the process with the given name.
+
+        Returns:
+            The process ID of the process with the given name.
+
+        Raises:
+            OSError: If the process cannot be found.
+
+        """
         for process in psutil.process_iter(['pid', 'name']):
             if process.info['name'] == self.process_name:
                 return process.info['pid']
-        return None
-    
-    def find_process(self):
-        self.process_id = self.get_process_id()
-        if self.process_id is not None:
-            return True
-        else:
-            return False
-        
+        raise OSError("Process not found.")
 
-    def open_process(self, process_id):
+
+    def open_process(self, target_process_id):
+        """
+        Opens a handle to the process with the given ID.
+
+        Args:
+            target_process_id: The process ID of the process to open a handle to.
+
+        Returns:
+            The handle to the process.
+
+        Raises:
+            OSError: If the process cannot be found or the handle cannot be opened.
+
+        """
         PROCESS_ALL_ACCESS = 0x1F0FFF
         INVALID_HANDLE_VALUE = -1
 
@@ -49,13 +91,27 @@ class DllInjector:
         OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
         OpenProcess.restype = wintypes.HANDLE
 
-        process_handle = OpenProcess(PROCESS_ALL_ACCESS, False, wintypes.DWORD(process_id))
+        process_handle = OpenProcess(PROCESS_ALL_ACCESS, False, target_process_id)
         if process_handle == INVALID_HANDLE_VALUE:
-            print("Error al abrir el proceso")
-            return None
+            raise OSError("Process not found or handle cannot be opened.")
         return process_handle
-    
+
+
     def allocate_memory(self, process_handle, size):
+        """
+        Allocates memory in the process with the given handle.
+
+        Args:
+            process_handle: The handle to the process to allocate memory in.
+            size: The size of the memory to allocate.
+
+        Returns:
+            The address of the allocated memory.
+
+        Raises:
+            OSError: If the memory cannot be allocated.
+
+        """
         MEM_COMMIT = 0x1000
         MEM_RESERVE = 0x2000
         PAGE_READWRITE = 0x04
@@ -68,6 +124,18 @@ class DllInjector:
         return memory_address
 
     def write_memory(self, process_handle, memory_address, data):
+        """
+        Writes data to the memory location with the given address in the process with the given handle.
+
+        Args:
+            process_handle: The handle to the process to write to.
+            memory_address: The address of the memory location to write to.
+            data: The data to write.
+
+        Raises:
+            OSError: If the memory cannot be written to.
+
+        """
         WriteProcessMemory = ctypes.windll.kernel32.WriteProcessMemory
         WriteProcessMemory.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.LPCVOID, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
         WriteProcessMemory.restype = wintypes.BOOL
@@ -77,6 +145,21 @@ class DllInjector:
         return bytes_written.value
     
     def create_remote_thread(self, process_handle, LoadLibraryA, memory_address):
+        """
+        Creates a remote thread in the process with the given handle.
+
+        Args:
+            process_handle: The handle to the process to create the thread in.
+            LoadLibraryA: The address of the LoadLibraryA function.
+            memory_address: The address of the DLL to load.
+
+        Returns:
+            The handle to the remote thread.
+
+        Raises:
+            OSError: If the thread cannot be created.
+
+        """
         CreateRemoteThread = ctypes.windll.kernel32.CreateRemoteThread
         CreateRemoteThread.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, wintypes.LPVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
         CreateRemoteThread.restype = wintypes.HANDLE
@@ -91,7 +174,14 @@ class DllInjector:
     
 
     def inject_dll(self):
-        process_handle = self.open_process(self.process_id)
+        """
+        Injects the DLL into the process with the given name.
+
+        Raises:
+            OSError: If the DLL cannot be injected.
+
+        """
+        process_handle = self.open_process(self.target_process_id)
         if process_handle is None:
             return
 
@@ -123,6 +213,13 @@ class DllInjector:
 
     
     def unload_dll(self):
+        """
+        Unloads the DLL from the process with the given name.
+
+        Raises:
+            OSError: If the DLL cannot be unloaded.
+
+        """
         # Obtén el módulo inyectado en el proceso
         hModule = self.get_injected_module()
 
@@ -135,7 +232,7 @@ class DllInjector:
     def get_injected_module(self):
         module_name = os.path.basename(self.dll_path)
 
-        for module in psutil.Process(self.process_id).memory_maps():
+        for module in psutil.Process(self.target_process_id).memory_maps():
             if module_name.lower() in module.path.lower():
                 return module.path
 
@@ -224,8 +321,8 @@ class App:
 
 
 if __name__ == "__main__":
-    dll_path = os.getenv("DLL_PATH")
-    process_name = os.getenv("PROCESS_NAME")
+    dll_path = os.environ["DLL_PATH"]
+    process_name = os.environ["PROCESS_NAME"]
     dll_injector = DllInjector(dll_path, process_name)
     app = App(dll_injector)
     app.run()
